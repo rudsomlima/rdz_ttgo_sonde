@@ -1885,6 +1885,7 @@ void setup()
     Serial.printf("%d:%d ", i, v);
   }
   Serial.println("");
+
 #ifdef ESP_MEM_DEBUG
   esp_err_t error = heap_caps_register_failed_alloc_callback(heap_caps_alloc_failed_hook);
 #endif
@@ -3218,6 +3219,7 @@ int fetchHTTPheader(int *validType) {
 void loop() {
   Serial.printf("\nMAIN: Running loop in state %d [currentDisp:%d, lastDisp:%d]. free heap: %d, unused stack: %d\n",
                 mainState, currentDisplay, lastDisplay, ESP.getFreeHeap(), uxTaskGetStackHighWaterMark(0));
+
   switch (mainState) {
     case ST_DECODER:
 #ifndef DISABLE_MAINRX
@@ -3255,6 +3257,38 @@ void loop() {
     lastMqttUptime = now;
   }
 #endif
+
+
+// #####################################################
+
+  #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */ 
+  struct tm timeinfo;
+  uint8_t hora_deslig = 3;
+  uint8_t min_deslig = 00;
+  uint8_t hora_ligar = 4;
+  uint8_t min_ligar = 56;
+
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+    return;
+  }
+
+  uint8_t hora = timeinfo.tm_hour-3;  //GMT -3
+  uint8_t min = timeinfo.tm_min; 
+ 
+
+  if(hora>12) hora=hora-12;  
+  Serial.printf("\nHORA: %d MINUTO: %d \n", hora, min);
+  if(hora>hora_deslig || (hora==hora_deslig && min>min_deslig)) { //se passou de 11h00 calcule o tempo pra desligar
+    uint16_t segundos_ligar = (hora_ligar - hora)*3600 + (min_ligar - min)*60;   
+      Serial.printf("VOLTA A LIGAR EM %dh%dmin",hora_ligar-hora,min_ligar-min);
+      Serial.printf("\nENTROU NO DEEP SLEEP\n");     
+      esp_sleep_enable_timer_wakeup(segundos_ligar * uS_TO_S_FACTOR);      
+      // esp_deep_sleep_start();
+  }
+  
+
+// #####################################################
 
 }
 
