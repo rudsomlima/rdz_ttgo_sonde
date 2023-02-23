@@ -35,6 +35,8 @@
 //#define ESP_MEM_DEBUG 1
 //int e;
 
+boolean medido_milis=0;
+
 enum MainState { ST_DECODER, ST_SPECTRUM, ST_WIFISCAN, ST_UPDATE, ST_TOUCHCALIB };
 static MainState mainState = ST_WIFISCAN; // ST_WIFISCAN;
 const char *mainStateStr[5] = {"DECODER", "SPECTRUM", "WIFISCAN", "UPDATE", "TOUCHCALIB" };
@@ -3268,55 +3270,48 @@ void loop() {
 
     #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */ 
     struct tm timeinfo;
-    uint8_t hora_deslig = 11;
-    uint8_t min_deslig = 13;
-    uint8_t hora_ligar = 23;
-    uint8_t min_ligar = 0;
-    bool medido_milis = 0;
+    uint8_t hora_desligar = 16;
+    uint8_t min_desligar = 58;
+    uint8_t hora_ligar = 17;
+    uint8_t min_ligar = 5;
 
     if(!getLocalTime(&timeinfo)){
       Serial.println("Failed to obtain time");
       return;
     }
-    
-    // Obtem a hora atual do sistema
-    // struct tm current_time;
-    // getLocalTime(&current_time);
 
     time_t now = time(NULL);
     struct tm *tm = localtime(&now);
+    struct tm horario_ligar = *tm; // Inicializa com os valores do horário atual
+    horario_ligar.tm_hour = hora_ligar+3;
+    horario_ligar.tm_min = min_ligar;
+    horario_ligar.tm_sec = 0;
 
-    // Cria um novo struct tm com os valores de 20:25 do dia atual
-    struct tm target_tm = *tm; // Inicializa com os valores do horário atual
-    target_tm.tm_hour = hora_ligar+3;
-    target_tm.tm_min = min_ligar;
-    target_tm.tm_sec = 0;
+    struct tm *tn = localtime(&now);
+    struct tm horario_desligar = *tn; // Inicializa com os valores do horário atual
+    horario_desligar.tm_hour = hora_desligar+3;
+    horario_desligar.tm_min = min_desligar;
+    horario_desligar.tm_sec = 0;
     
     // Calcula a diferença de tempo em segundos
-    time_t diff = difftime(mktime(&target_tm), mktime(&timeinfo));
+    time_t diff = difftime(mktime(&horario_ligar), mktime(&timeinfo));
     
-    // Exibe a diferença de tempo em minutos
-    printf("Diferença de tempo: %dh%d\n", diff/3600, (diff%3600)/60);
-    // Serial.printf("Tempo restante até as 20:25: %d horas e %d minutos\n", diff_hours, diff_minutes);
-
-    // Serial.printf("\nHORA: %d MINUTO: %d", hora,min);
-    // Serial.printf("\nTEMPO RESTANTE: %dh%d ",&rest->tm_hour,&rest->tm_min);
-
+    Serial.printf("\nHORA ATUAL: %dh%d", timeinfo.tm_hour-3,timeinfo.tm_min);
+    Serial.printf("\nTEMPO PARA LIGAR: %dh%dm%ds", diff/3600, (diff%3600)/60, diff%60);
     
-    Serial.printf("\nHORA: %lu", timeinfo);
-    if(target_tm || (hora==hora_deslig && min>=min_deslig)) { //se passou da hora de deslig calcule o tempo para entrar em hibernação
-      uint16_t segundos_ligar = (hora_ligar - hora)*3600 + (min_ligar%60 - min%60)*60;
-      Serial.printf("\nSegundos para ligar: %lu\n", segundos_ligar);
-      if(segundos_ligar>=0) {   
-        Serial.printf("VOLTA A LIGAR EM %dh%dmin",hora_ligar-hora,min_ligar%60 - min%60);
-        Serial.printf("\nENTROU NO DEEP SLEEP\n");     
-        esp_sleep_enable_timer_wakeup((segundos_ligar-60) * uS_TO_S_FACTOR); 
-        unsigned long time_n;
+    if(mktime(&timeinfo)>mktime(&horario_desligar)) { //se passou da hora de deslig calcule o tempo para entrar em hibernação
+        Serial.printf("\nENTROU NO DEEP SLEEP"); 
+        Serial.printf("\nTEMPO PARA RELIGAR: %lu segundos", diff);    
+        esp_sleep_enable_timer_wakeup(((diff%3600)-60) * uS_TO_S_FACTOR); 
+        uint32_t time_n;
         if(!medido_milis) { //se ainda não mediu o tempo meça e pare
           time_n = millis();
           medido_milis=1;
+          Serial.printf("\nMILLIS = 1");
         }
-        Serial.printf("\ntempo: %ld\n", (millis()-time_n)/1000);
+        Serial.printf("\nTime_n: %lu", time_n);
+        Serial.printf("\nMILLIS: %lu", millis());
+        Serial.printf("\nTEMPO EXTRA: %lu", 60-((millis()-time_n)/1000));
         if(millis() - time_n>60000) {    //5 min pra dar tempo de entrar e desativar o deep sleep
           esp_deep_sleep_start();
         }
@@ -3325,7 +3320,6 @@ void loop() {
   }
 // DEEP SLEEP   #####################################################
 
-}
 
 void aprs_station_update() {
   int chase = sonde.config.chase;
