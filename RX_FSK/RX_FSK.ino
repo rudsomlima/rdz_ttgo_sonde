@@ -703,6 +703,7 @@ struct st_configitems config_list[] = {
   {"gps_rxd", 0, &sonde.config.gps_rxd},
   {"gps_txd", 0, &sonde.config.gps_txd},
   {"batt_adc", 0, &sonde.config.batt_adc},
+  {"deep_sleep", 0, &sonde.config.deep_sleep},
 #if 1
   {"sx1278_ss", 0, &sonde.config.sx1278_ss},
   {"sx1278_miso", 0, &sonde.config.sx1278_miso},
@@ -2568,6 +2569,7 @@ void loopSpectrum() {
       enterMode(ST_DECODER);
     }
   }
+  
 }
 
 void startSpectrumDisplay() {
@@ -3259,36 +3261,69 @@ void loop() {
 #endif
 
 
-// #####################################################
-
-  #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */ 
-  struct tm timeinfo;
-  uint8_t hora_deslig = 3;
-  uint8_t min_deslig = 00;
-  uint8_t hora_ligar = 4;
-  uint8_t min_ligar = 56;
-
-  if(!getLocalTime(&timeinfo)){
-    Serial.println("Failed to obtain time");
-    return;
-  }
-
-  uint8_t hora = timeinfo.tm_hour-3;  //GMT -3
-  uint8_t min = timeinfo.tm_min; 
  
+// DEEP SLEEP   #####################################################
 
-  if(hora>12) hora=hora-12;  
-  Serial.printf("\nHORA: %d MINUTO: %d \n", hora, min);
-  if(hora>hora_deslig || (hora==hora_deslig && min>min_deslig)) { //se passou de 11h00 calcule o tempo pra desligar
-    uint16_t segundos_ligar = (hora_ligar - hora)*3600 + (min_ligar - min)*60;   
-      Serial.printf("VOLTA A LIGAR EM %dh%dmin",hora_ligar-hora,min_ligar-min);
-      Serial.printf("\nENTROU NO DEEP SLEEP\n");     
-      esp_sleep_enable_timer_wakeup(segundos_ligar * uS_TO_S_FACTOR);      
-      // esp_deep_sleep_start();
+  if(sonde.config.deep_sleep) { // se está configurada a funcao deep sleep
+
+    #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */ 
+    struct tm timeinfo;
+    uint8_t hora_deslig = 11;
+    uint8_t min_deslig = 13;
+    uint8_t hora_ligar = 23;
+    uint8_t min_ligar = 0;
+    bool medido_milis = 0;
+
+    if(!getLocalTime(&timeinfo)){
+      Serial.println("Failed to obtain time");
+      return;
+    }
+    
+    // Obtem a hora atual do sistema
+    // struct tm current_time;
+    // getLocalTime(&current_time);
+
+    time_t now = time(NULL);
+    struct tm *tm = localtime(&now);
+
+    // Cria um novo struct tm com os valores de 20:25 do dia atual
+    struct tm target_tm = *tm; // Inicializa com os valores do horário atual
+    target_tm.tm_hour = hora_ligar+3;
+    target_tm.tm_min = min_ligar;
+    target_tm.tm_sec = 0;
+    
+    // Calcula a diferença de tempo em segundos
+    time_t diff = difftime(mktime(&target_tm), mktime(&timeinfo));
+    
+    // Exibe a diferença de tempo em minutos
+    printf("Diferença de tempo: %dh%d\n", diff/3600, (diff%3600)/60);
+    // Serial.printf("Tempo restante até as 20:25: %d horas e %d minutos\n", diff_hours, diff_minutes);
+
+    // Serial.printf("\nHORA: %d MINUTO: %d", hora,min);
+    // Serial.printf("\nTEMPO RESTANTE: %dh%d ",&rest->tm_hour,&rest->tm_min);
+
+    
+    Serial.printf("\nHORA: %lu", timeinfo);
+    if(target_tm || (hora==hora_deslig && min>=min_deslig)) { //se passou da hora de deslig calcule o tempo para entrar em hibernação
+      uint16_t segundos_ligar = (hora_ligar - hora)*3600 + (min_ligar%60 - min%60)*60;
+      Serial.printf("\nSegundos para ligar: %lu\n", segundos_ligar);
+      if(segundos_ligar>=0) {   
+        Serial.printf("VOLTA A LIGAR EM %dh%dmin",hora_ligar-hora,min_ligar%60 - min%60);
+        Serial.printf("\nENTROU NO DEEP SLEEP\n");     
+        esp_sleep_enable_timer_wakeup((segundos_ligar-60) * uS_TO_S_FACTOR); 
+        unsigned long time_n;
+        if(!medido_milis) { //se ainda não mediu o tempo meça e pare
+          time_n = millis();
+          medido_milis=1;
+        }
+        Serial.printf("\ntempo: %ld\n", (millis()-time_n)/1000);
+        if(millis() - time_n>60000) {    //5 min pra dar tempo de entrar e desativar o deep sleep
+          esp_deep_sleep_start();
+        }
+      }
+    }
   }
-  
-
-// #####################################################
+// DEEP SLEEP   #####################################################
 
 }
 
