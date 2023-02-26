@@ -3261,64 +3261,72 @@ void loop() {
     lastMqttUptime = now;
   }
 #endif
-
-
  
 // DEEP SLEEP   #####################################################
 
   if(sonde.config.deep_sleep) { // se está configurada a funcao deep sleep
 
     #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */ 
-    struct tm timeinfo;
-    uint8_t hora_desligar = 16;
-    uint8_t min_desligar = 58;
-    uint8_t hora_ligar = 17;
-    uint8_t min_ligar = 5;
+    #define GMT -3
+    int8_t hora_desligar = 11;
+    int8_t min_desligar = 0;
+    int8_t hora_ligar = 8;
+    int8_t min_ligar = 25;
+    uint32_t seg_restante;
+    int8_t hora_restante;
+    int8_t min_restante;
 
+    struct tm timeinfo;
     if(!getLocalTime(&timeinfo)){
       Serial.println("Failed to obtain time");
       return;
     }
 
-    time_t now = time(NULL);
-    struct tm *tm = localtime(&now);
-    struct tm horario_ligar = *tm; // Inicializa com os valores do horário atual
-    horario_ligar.tm_hour = hora_ligar+3;
-    horario_ligar.tm_min = min_ligar;
-    horario_ligar.tm_sec = 0;
+    int8_t hora_atual = timeinfo.tm_hour + GMT;
+    int8_t min_atual = timeinfo.tm_min;
+    if(hora_atual>12) hora_atual-=12;
+    // else if(hora_atual<=0) hora_atual+=12;
 
-    struct tm *tn = localtime(&now);
-    struct tm horario_desligar = *tn; // Inicializa com os valores do horário atual
-    horario_desligar.tm_hour = hora_desligar+3;
-    horario_desligar.tm_min = min_desligar;
-    horario_desligar.tm_sec = 0;
+    Serial.printf("\nHORA ATUAL: %dh%dm%ds", hora_atual,min_atual,timeinfo.tm_sec);
+    hora_restante = hora_ligar - hora_atual;
+    Serial.printf("\nHORA restante: %d", hora_restante);
+    if(hora_restante<0) hora_restante += 12;
+    min_restante = min_ligar - min_atual;
+    Serial.printf("\nMINUTO restante: %d", min_restante);
+    if(min_restante<=0 && hora_restante>=0) {
+      min_restante += 60;
+      hora_restante += 11;
+    }
+    seg_restante = hora_restante*3600 + min_restante*60 + 59-timeinfo.tm_sec;
+      
+    Serial.printf("\nSEGUNDOS RESTANTES: %d", seg_restante);
+    Serial.printf("\nTEMPO PARA RELIGAR: %dh%dm%ds", hora_restante, min_restante, 59-timeinfo.tm_sec);
     
-    // Calcula a diferença de tempo em segundos
-    time_t diff = difftime(mktime(&horario_ligar), mktime(&timeinfo));
-    
-    Serial.printf("\nHORA ATUAL: %dh%d", timeinfo.tm_hour-3,timeinfo.tm_min);
-    Serial.printf("\nTEMPO PARA LIGAR: %dh%dm%ds", diff/3600, (diff%3600)/60, diff%60);
-    
-    if(mktime(&timeinfo)>mktime(&horario_desligar)) { //se passou da hora de deslig calcule o tempo para entrar em hibernação
-        Serial.printf("\nENTROU NO DEEP SLEEP"); 
-        Serial.printf("\nTEMPO PARA RELIGAR: %lu segundos", diff);    
-        esp_sleep_enable_timer_wakeup(((diff%3600)-60) * uS_TO_S_FACTOR); 
-        uint32_t time_n;
-        if(!medido_milis) { //se ainda não mediu o tempo meça e pare
-          time_n = millis();
-          medido_milis=1;
-          Serial.printf("\nMILLIS = 1");
-        }
-        Serial.printf("\nTime_n: %lu", time_n);
-        Serial.printf("\nMILLIS: %lu", millis());
-        Serial.printf("\nTEMPO EXTRA: %lu", 60-((millis()-time_n)/1000));
-        if(millis() - time_n>60000) {    //5 min pra dar tempo de entrar e desativar o deep sleep
-          esp_deep_sleep_start();
-        }
+    // if((hora_atual>hora_desligar) || (hora_atual==hora_desligar && min_atual>=min_desligar))  { //se passou da hora de deslig calcule o tempo para entrar em hibernação
+
+    if(((hora_atual>hora_desligar) | (hora_atual==hora_desligar && min_atual>=min_desligar)) | ((hora_ligar>hora_atual) | (hora_ligar==hora_atual && min_ligar>=min_atual)))  {     
+             
+      uint16_t time_n;
+      if(!medido_milis) { //se ainda não mediu o tempo meça e pare
+        time_n = millis();
+        medido_milis=1;
+        Serial.printf("\nMILLIS = 1");
+      }
+      Serial.printf("\nTime_n: %lu", time_n);
+      Serial.printf("\nMILLIS: %lu", millis());
+      Serial.printf("\nTEMPO EXTRA: %lu", 60-((millis()-time_n)/1000));
+      if((millis() - time_n)>60000) {    //5 min pra dar tempo de entrar e desativar o deep sleep
+        sonde.clearDisplay();
+        esp_sleep_enable_timer_wakeup(seg_restante * uS_TO_S_FACTOR); 
+        esp_deep_sleep_start();
       }
     }
   }
+
 // DEEP SLEEP   #####################################################
+
+}
+
 
 
 void aprs_station_update() {
