@@ -3290,7 +3290,7 @@ void loop() {
     Serial.printf("\nHORA ATUAL: %dh%dm%ds", hora_atual,min_atual,timeinfo.tm_sec);
     hora_restante = hora_ligar - hora_atual;
     Serial.printf("\nHORA restante: %d", hora_restante);
-    min_restante = min_ligar - min_atual;
+    min_restante = min_ligar - min_atual - 1;
     Serial.printf("\nMINUTO restante: %d", min_restante);
     if(min_restante<0 && hora_restante==0) {
       min_restante += 59;
