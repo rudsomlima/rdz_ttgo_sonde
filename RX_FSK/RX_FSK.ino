@@ -3268,10 +3268,10 @@ void loop() {
 
     #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */ 
     #define GMT -3
-    int8_t hora_ligar = 2;
-    int8_t min_ligar = 5;
-    int8_t hora_desligar = 2;
-    int8_t min_desligar = 10;   
+    int8_t hora_ligar = 8;
+    int8_t min_ligar = 25;
+    int8_t hora_desligar = 12;
+    int8_t min_desligar = 1;   
     uint32_t seg_restante;
     int8_t hora_restante;
     int8_t min_restante;
@@ -3293,14 +3293,19 @@ void loop() {
     min_restante = min_ligar - min_atual;
     Serial.printf("\nMINUTO restante: %d", min_restante);
     if(min_restante<0 && hora_restante==0) {
-      min_restante += 60;
+      min_restante += 59;
       hora_restante +=11;
     }
-    if(hora_restante<0) hora_restante += 12;
-    seg_restante = hora_restante*3600 + min_restante*60 + timeinfo.tm_sec;
+    else if(min_restante<0 && hora_restante>0) {
+      min_restante += 59;
+      hora_restante--;
+    }
+    seg_restante = hora_restante*3600 + min_restante*60 + 60-timeinfo.tm_sec;
+  
       
     Serial.printf("\nSEGUNDOS RESTANTES: %d", seg_restante);
-    Serial.printf("\nTEMPO PARA RELIGAR: %dh%dm%ds", hora_restante, min_restante, 59-timeinfo.tm_sec);
+    Serial.printf("\nTEMPO PARA RELIGAR: %dh%dm%ds", hora_restante, min_restante, 60-timeinfo.tm_sec);
+    Serial.printf("\nTEMPO PARA RELIGAR SEGUNDOS: %dh%dm%ds", seg_restante/3600, (seg_restante%3600)/60, seg_restante%60);
     
 
     // para desligamento
