@@ -3271,7 +3271,7 @@ void loop() {
     int8_t hora_ligar = 8;
     int8_t min_ligar = 25;
     int8_t hora_desligar = 12;
-    int8_t min_desligar = 1;   
+    int8_t min_desligar = 0;   
     uint32_t seg_restante;
     int8_t hora_restante;
     int8_t min_restante;
@@ -3285,13 +3285,16 @@ void loop() {
     int8_t hora_atual = timeinfo.tm_hour + GMT;
     int8_t min_atual = timeinfo.tm_min;
     if(hora_atual>12) hora_atual-=12;
-    // else if(hora_atual<0) hora_atual+=12;
+    else if(hora_atual<0) hora_atual+=12;
 
     Serial.printf("\nHORA ATUAL: %dh%dm%ds", hora_atual,min_atual,timeinfo.tm_sec);
     hora_restante = hora_ligar - hora_atual;
     Serial.printf("\nHORA restante: %d", hora_restante);
     min_restante = min_ligar - min_atual - 1;
     Serial.printf("\nMINUTO restante: %d", min_restante);
+    if(hora_restante<=0) {
+      hora_restante += 12;
+    }
     if(min_restante<0 && hora_restante==0) {
       min_restante += 59;
       hora_restante +=11;
