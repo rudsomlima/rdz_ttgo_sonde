@@ -151,7 +151,7 @@ var cfgs = [
   ["gps_rxd", "GPS RXD pin (-1 to disable)"],
   ["gps_txd", "GPS TXD pin (not really needed)"],
   ["batt_adc", "Battery measurement pin"],
-  ["deep_sleep", "Deep sleep"],
+  ["deep_sleep", "Deep sleep (min que o receptor ficará ligado quando uma sonda recebida; 0=Deep sleep off"],
   ["sx1278_ss", "SX1278 SS"],
   ["sx1278_miso", "SX1278 MISO"],
   ["sx1278_mosi", "SX1278 MOSI"],

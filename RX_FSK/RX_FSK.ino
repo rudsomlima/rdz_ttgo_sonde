@@ -36,6 +36,8 @@
 //int e;
 
 boolean medido_milis=0;
+boolean flag_rx = 0;
+uint32_t time_rx_off;
 
 enum MainState { ST_DECODER, ST_SPECTRUM, ST_WIFISCAN, ST_UPDATE, ST_TOUCHCALIB };
 static MainState mainState = ST_WIFISCAN; // ST_WIFISCAN;
@@ -2258,10 +2260,13 @@ void parseGpsJson(char *data) {
 
 static char rdzData[RDZ_DATA_LEN];
 static int rdzDataPos = 0;
+uint8_t rx_status = 0;
 
 void loopDecoder() {
   // sonde knows the current type and frequency, and delegates to the right decoder
   uint16_t res = sonde.waitRXcomplete();
+  // Serial.printf("\n res: %x",res);
+  if(res == 0xFF00) rx_status = 1; //O RX foi ativado, recebeu algum sinal (RX_OK)
   int action;
   //Serial.printf("waitRX result is %x\n", (int)res);
   action = (int)(res >> 8);
@@ -3264,13 +3269,13 @@ void loop() {
  
 // DEEP SLEEP   #####################################################
 
-  if(sonde.config.deep_sleep) { // se está configurada a funcao deep sleep
+  if(sonde.config.deep_sleep>0) { // se está configurada a funcao deep sleep
 
     #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */ 
     #define GMT -3
     int8_t hora_ligar = 8;
     int8_t min_ligar = 25;
-    int8_t hora_desligar = 12;
+    int8_t hora_desligar = 10;
     int8_t min_desligar = 0;   
     uint32_t seg_restante;
     int8_t hora_restante;
@@ -3306,13 +3311,34 @@ void loop() {
     seg_restante = hora_restante*3600 + min_restante*60 + 60-timeinfo.tm_sec;
   
       
-    Serial.printf("\nSEGUNDOS RESTANTES: %d", seg_restante);
+    // Serial.printf("\nSEGUNDOS RESTANTES: %d", seg_restante);
     Serial.printf("\nTEMPO PARA RELIGAR: %dh%dm%ds", hora_restante, min_restante, 60-timeinfo.tm_sec);
-    Serial.printf("\nTEMPO PARA RELIGAR SEGUNDOS: %dh%dm%ds", seg_restante/3600, (seg_restante%3600)/60, seg_restante%60);
-    
+    // Serial.printf("\nTEMPO PARA RELIGAR SEGUNDOS: %dh%dm%ds", seg_restante/3600, (seg_restante%3600)/60, seg_restante%60);
+    // Serial.printf("\n rx_status: %d",(int) rx_status);
+
+    // RX timeout
+    if(rx_status && !flag_rx) {  //se recebeu sinal do rx
+      Serial.printf("\n ATIVOU O RX\n");
+      time_rx_off = millis() + sonde.config.deep_sleep * 60 * 1000; //o tempo para desligar é a hora atual mais os minutos
+      flag_rx = 1;
+    }
+    // else Serial.printf("\n NAO ATIVOU O RX\n");
+
+    if(flag_rx) {
+      uint32_t tempo_restante;
+      tempo_restante = (time_rx_off - millis())/1000; 
+      // Serial.printf("\ntime_rx_off: %lu", time_rx_off);
+      // Serial.printf("\ntempo_restante: %lu", tempo_restante);
+      Serial.printf("\nSONDA CAPTADA, DESLIGANDO EM: %dh%dm%ds", tempo_restante/3600, (tempo_restante%3600)/60, tempo_restante%60);
+      if(millis() >= time_rx_off) {
+        sonde.clearDisplay();
+        esp_sleep_enable_timer_wakeup(seg_restante * uS_TO_S_FACTOR); 
+        esp_deep_sleep_start();
+      }
+    }     
 
     // para desligamento
-    if(((hora_atual>hora_desligar) || (hora_atual==hora_desligar && min_atual>=min_desligar)) || ((hora_ligar>hora_atual) || (hora_ligar==hora_atual && min_ligar>min_atual)))  {     
+    if((!flag_rx) && (((hora_atual>hora_desligar) || (hora_atual==hora_desligar && min_atual>=min_desligar)) || ((hora_ligar>hora_atual) || (hora_ligar==hora_atual && min_ligar>min_atual))))  {     
              
       uint16_t time_n;
       if(!medido_milis) { //se ainda não mediu o tempo meça e pare
