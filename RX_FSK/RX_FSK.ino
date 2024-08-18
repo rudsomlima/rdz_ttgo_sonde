@@ -2263,7 +2263,8 @@ void parseGpsJson(char *data) {
 static char rdzData[RDZ_DATA_LEN];
 static int rdzDataPos = 0;
 uint16_t rx_status = 0;
-uint8_t rx_status_anteior = 0;
+uint16_t rx_status_anterior = 0;
+uint16_t time_n = 0;
 
 void loopDecoder() {
   // sonde knows the current type and frequency, and delegates to the right decoder
@@ -3326,7 +3327,6 @@ void loop() {
     Serial.printf("\nTEMPO PARA RELIGAR: %dh%dm%ds", hora_restante, min_restante, 60-timeinfo.tm_sec);
 
     // RX timeout
-    Serial.printf("\nrx_status: %x", rx_status);
     // Serial.printf("\nflag_rx: %d \n", flag_rx);
     
     /*
@@ -3343,56 +3343,35 @@ void loop() {
      /*  para desligamento
     if((!flag_rx) && (((hora_atual>hora_desligar) || (hora_atual==hora_desligar && min_atual>=min_desligar)) || ((hora_ligar>hora_atual) || (hora_ligar==hora_atual && min_ligar>min_atual))))  {     
     */
-
-     //res = 0x8001 ainda não recebeu sinal / 0xFF00 recebendo sinal da sonda / 0xFF01 perdeu contato com a sonda e volta para o 8001 tela só com o ip
-
-    Serial.printf("\nmedido_milis_1: %d \nmedido_milis_2: %d", medido_milis_1, medido_milis_2);
+     //res = 0x8001 ainda não recebeu sinal / 0xFF00 recebendo sinal da sonda / 0xFF01 perdeu contato com a sonda e volta para o 8001 tela só com o ip / 0xFF02 crc error
+    Serial.printf("\nTEMPO EXTRA: %x - %d", rx_status, (time_rx_off - millis()) / 1000);
+    Serial.printf("\nrx_status: %x - rx_status_anterior: %x", rx_status, rx_status_anterior);
+    if ((rx_status == 0xFF00) && (rx_status != rx_status_anterior))
+      {
+        rx_status_anterior = rx_status;
+        time_rx_off = 0xFFFF;
+      }
+    if ((rx_status == 0xFF01) && (rx_status != rx_status_anterior))  { // perdeu contato com a sonda
+      rx_status_anterior = rx_status;
+      time_rx_off = millis() + sonde.config.deep_sleep * 60 * 1000; // o tempo para desligar é a hora atual mais os minutos
+    }
+    if ((rx_status == 0x8001) && (rx_status != rx_status_anterior) && (rx_status_anterior != 0xFF01))  { //ainda nao recebeu sinal da sonda { // se o rx ainda não recebeu o sinal ou perdeu contato com a sonda
+      rx_status_anterior = rx_status;        
+      time_rx_off = millis() + sonde.config.deep_sleep * 3 * 60 * 1000; // o tempo para desligar é a hora atual mais os minutos / //multipilcado por 3 se nao recebeu ainda
+    } 
+    if ((millis() > time_rx_off) && (rx_status !=0xFF00) && (rx_status != 0xFF02))  // se a sonda estpa ligada não entra na contagem pra desligamento do rx
+      {
+      Serial.printf("\nMillis: %d *** time_rx_off: %d", millis(), time_rx_off);
+      sonde.clearDisplay();
+      esp_sleep_enable_timer_wakeup(seg_restante * uS_TO_S_FACTOR);
+      esp_deep_sleep_start();
+      }
     
-    if (rx_status == 0xFF00)  {
-      time_rx_off = 0xFFFF;  //recebendo sinal da sonda zera time_rx_off pra não desligar
-      Serial.printf("\nTEMPO EXTRA FF01: %d", (time_rx_off - millis()) / 1000);
-      }
-      if (rx_status == 0xFF01 && rx_status != rx_status_anteior)  { // perdeu contato com a sonda
-      rx_status_anteior = rx_status;
-      if (!medido_milis_1)
-      { // se ainda não mediu o tempo meça e pare
-        // time_n = millis();
-        medido_milis_1 = 1;
-        medido_milis_2 = 1;
-        time_rx_off = millis() + sonde.config.deep_sleep * 60 * 1000; // o tempo para desligar é a hora atual mais os minutos
-      }
-      // Serial.printf("\nTime_n: %lu", time_n);
-      // Serial.printf("\nMILLIS: %lu", millis());
-      Serial.printf("\nTEMPO EXTRA FF01: %d", (time_rx_off - millis()) / 1000);
-      if (millis() > time_rx_off)
-      {    
-        sonde.clearDisplay();
-        esp_sleep_enable_timer_wakeup(seg_restante * uS_TO_S_FACTOR); 
-        esp_deep_sleep_start();
-        }
-      }
-
-      if (rx_status == 0x8001 && rx_status != rx_status_anteior)  { //ainda nao recebeu sinal da sonda { // se o rx ainda não recebeu o sinal ou perdeu contato com a sonda
-        rx_status_anteior = rx_status;
-        if (!medido_milis_2)    { // se ainda não mediu o tempo meça e pare
-          // time_n = millis();
-          medido_milis_1 = 0;
-          medido_milis_2 = 1;          
-          time_rx_off = millis() + sonde.config.deep_sleep * 3 * 60 * 1000; // o tempo para desligar é a hora atual mais os minutos / //multipilcado por 3 se nao recebeu ainda
-          }
-        Serial.printf("\nTEMPO EXTRA 8001: %d", (time_rx_off - millis()) / 1000);  
-        if (millis() > time_rx_off)
-          {
-          sonde.clearDisplay();
-          esp_sleep_enable_timer_wakeup(seg_restante * uS_TO_S_FACTOR);
-          esp_deep_sleep_start();
-          }
-      }
+    }
     }
 
 // DEEP SLEEP   #####################################################
 
-}
 
 
 
